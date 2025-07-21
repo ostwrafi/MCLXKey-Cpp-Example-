@@ -1,0 +1,8 @@
+﻿  main.cpp
+LINK : warning LNK4098: defaultlib 'LIBCMT' conflicts with use of other libs; use /NODEFAULTLIB:library
+  Generating code
+  126 of 1840 functions ( 6.8%) were compiled, the rest were copied from previous compilation.
+    68 functions were new in current compilation
+    3 functions had inline decision re-evaluated but remain unchanged
+  Finished generating code
+  example.vcxproj -> C:\Users\Nur Mohammad Rafi\Downloads\KeyAuth-CPP-Example-main\KeyAuth-CPP-Example-main\x64\x64\Release\example.exe
