@@ -1,217 +1,102 @@
-#include <Windows.h>
-#include "auth.hpp"
-#include <string>
-#include <thread>
-#include "utils.hpp"
-#include "skStr.h"
 #include <iostream>
-std::string tm_to_readable_time(tm ctx);
-static std::time_t string_to_timet(std::string timestamp);
-static std::tm timet_to_tm(time_t timestamp);
-const std::string compilation_date = (std::string)skCrypt(__DATE__);
-const std::string compilation_time = (std::string)skCrypt(__TIME__);
-void sessionStatus();
+#include <string>
+#include "auth.hpp"
+#include "json.hpp"
+#include <curl/curl.h>
+using json = nlohmann::json;
 
-using namespace KeyAuth;
+size_t WriteCallback(void* contents, size_t size, size_t nmemb, std::string* userp) {
+    userp->append((char*)contents, size * nmemb);
+    return size * nmemb;
+}
 
-// copy and paste from https://keyauth.cc/app/ and replace these string variables
-// Please watch tutorial HERE https://www.youtube.com/watch?v=5x4YkTmFH-U
-std::string name = skCrypt("GameHackers").decrypt(); // App name
-std::string ownerid = skCrypt("tLfYsHY39n").decrypt(); // Account ID
-std::string version = skCrypt("1.0").decrypt(); // Application version. Used for automatic downloads see video here https://www.youtube.com/watch?v=kW195PLCBKs
-std::string url = skCrypt("https://keyauth.win/api/1.3/").decrypt(); // change if using KeyAuth custom domains feature
-std::string path = skCrypt("").decrypt(); // (OPTIONAL) see tutorial here https://www.youtube.com/watch?v=I9rxt821gMk&t=1s
+void login() {
+    std::string username, password;
+    std::cout << "\n=== Login ===\n";
+    std::cout << "Username: ";
+    std::getline(std::cin, username);
+    std::cout << "Password: ";
+    std::getline(std::cin, password);
 
+    // Prepare JSON POST data
+    json post_data = {
+        {"name", username},
+        {"pass", password},
+        {"hwid", "S-1-5-21-2072451449-1836442460-3661576764-1001"},
+        {"projectsecretid", "737a0a50fb7a4451ec5f476e3e571113"},
+        {"userid", "687bb018225ff98025e361d1"},
+        {"special_token", "ad8985011eef8f0f1470b8a76af85cecd9d439859961d77808b32673e09325ae"},
+        {"type", "login"}
+    };
 
-api KeyAuthApp(name, ownerid, version, url, path);
-
-int main()
-{
-    std::string consoleTitle = skCrypt("Loader - Built at:  ").decrypt() + compilation_date + " " + compilation_time;
-    SetConsoleTitleA(consoleTitle.c_str());
-    std::cout << skCrypt("\n\n Connecting..");
-
-    KeyAuthApp.init();
-    if (!KeyAuthApp.response.success)
-    {
-        std::cout << skCrypt("\n Status: ") << KeyAuthApp.response.message;
-        Sleep(1500);
-        exit(1);
+    CURL* curl = curl_easy_init();
+    std::string readBuffer;
+    if (curl) {
+        struct curl_slist* headers = NULL;
+        headers = curl_slist_append(headers, "Content-Type: application/json");
+        curl_easy_setopt(curl, CURLOPT_URL, "https://mclxkey.vercel.app/api"); // Replace with your actual URL
+        curl_easy_setopt(curl, CURLOPT_POSTFIELDS, post_data.dump().c_str());
+        curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers);
+        curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, WriteCallback);
+        curl_easy_setopt(curl, CURLOPT_WRITEDATA, &readBuffer);
+        CURLcode res = curl_easy_perform(curl);
+        curl_easy_cleanup(curl);
+        curl_slist_free_all(headers);
+        if (res != CURLE_OK) {
+            std::cout << "\nLogin request failed: " << curl_easy_strerror(res) << std::endl;
+            return;
+        }
+    } else {
+        std::cout << "\nFailed to initialize cURL." << std::endl;
+        return;
     }
 
-    std::string username, password, key, TfaCode; // keep this before the auto-login with saved file.
-    // because if you don't and the user has 2FA on, then they won't be asked for 2FA code and can't login.
-
-    if (std::filesystem::exists("test.json")) //change test.txt to the path of your file :smile:
-    {
-        if (!CheckIfJsonKeyExists("test.json", "username"))
-        {
-            key = ReadFromJson("test.json", "license");
-            KeyAuthApp.license(key);
-        }
-        else
-        {
-            username = ReadFromJson("test.json", "username");
-            password = ReadFromJson("test.json", "password");
-            KeyAuthApp.login(username, password);
+    // Parse server response
+    json j = json::parse(readBuffer);
+    MCLXKeyAuth::AuthResponse result;
+    result.success = j["success"].get<bool>();
+    if (result.success) {
+        result.message = "Login successful";
+        result.user.id = j["user"]["id"].get<std::string>();
+        result.user.name = j["user"]["name"].get<std::string>();
+        result.user.username = j["user"]["username"].get<std::string>();
+        result.user.expireDate = j["user"]["expireDate"].get<std::string>();
+        std::cout << "\nLogin successful!\n";
+        std::cout << "User Info:" << std::endl;
+        std::cout << "  ID: " << result.user.id << std::endl;
+        std::cout << "  Name: " << result.user.name << std::endl;
+        std::cout << "  Username: " << result.user.username << std::endl;
+        std::cout << "  Expire Date: " << result.user.expireDate << std::endl;
+    } else {
+        if (j.contains("message")) {
+            result.message = j["message"].get<std::string>();
+            std::cout << "\nLogin failed: " << result.message << std::endl;
+        } else {
+            std::cout << "\nLogin failed." << std::endl;
         }
     }
-    else
-    {
-        std::cout << skCrypt("\n\n [1] Login\n [2] Register\n [3] Upgrade\n [4] License key only\n\n Choose option: ");
+}
 
-        int option;
+void signup() {
+    std::cout << "\n=== Sign Up ===\n";
+    std::cout << "Sign up functionality is not implemented yet." << std::endl;
+}
 
-        std::cin >> option;
-        switch (option)
-        {
-        case 1:
-            std::cout << skCrypt("\n\n Enter username: ");
-            std::cin >> username;
-            std::cout << skCrypt("\n Enter password: ");
-            std::cin >> password;
-            KeyAuthApp.login(username, password, "");
+int main() {
+    while (true) {
+        std::cout << "\n=== Main Menu ===\n";
+        std::cout << "1. Login\n2. Sign Up\n0. Exit\nChoose option: ";
+        std::string option;
+        std::getline(std::cin, option);
+        if (option == "1") {
+            login();
+        } else if (option == "2") {
+            signup();
+        } else if (option == "0") {
             break;
-        case 2:
-            std::cout << skCrypt("\n\n Enter username: ");
-            std::cin >> username;
-            std::cout << skCrypt("\n Enter password: ");
-            std::cin >> password;
-            std::cout << skCrypt("\n Enter license: ");
-            std::cin >> key;
-            KeyAuthApp.regstr(username, password, key);
-            break;
-        case 3:
-            std::cout << skCrypt("\n\n Enter username: ");
-            std::cin >> username;
-            std::cout << skCrypt("\n Enter license: ");
-            std::cin >> key;
-            KeyAuthApp.upgrade(username, key);
-            break;
-        case 4:
-            std::cout << skCrypt("\n Enter license: ");
-            std::cin >> key;
-            KeyAuthApp.license(key, "");
-            break;
-        default:
-            std::cout << skCrypt("\n\n Status: Failure: Invalid Selection");
-            Sleep(3000);
-            exit(1);
+        } else {
+            std::cout << "Invalid option. Try again." << std::endl;
         }
     }
-
-    if (KeyAuthApp.response.message.empty()) exit(11);
-    if (!KeyAuthApp.response.success)
-    {
-        if (KeyAuthApp.response.message == "2FA code required.") {
-            if (username.empty() || password.empty()) {
-                std::cout << skCrypt("\n Your account has 2FA enabled, please enter 6-digit code:");
-                std::cin >> TfaCode;
-                KeyAuthApp.license(key, TfaCode);
-            }
-            else {
-                std::cout << skCrypt("\n Your account has 2FA enabled, please enter 6-digit code:");
-                std::cin >> TfaCode;
-                KeyAuthApp.login(username, password, TfaCode);
-            }
-
-            if (KeyAuthApp.response.message.empty()) exit(11);
-            if (!KeyAuthApp.response.success) {
-                std::cout << skCrypt("\n Status: ") << KeyAuthApp.response.message;
-                std::remove("test.json");
-                Sleep(1500);
-                exit(1);
-            }
-        }
-        else {
-            std::cout << skCrypt("\n Status: ") << KeyAuthApp.response.message;
-            std::remove("test.json");
-            Sleep(1500);
-            exit(1);
-        }
-    }
-
-    if (username.empty() || password.empty())
-    {
-        WriteToJson("test.json", "license", key, false, "", "");
-        std::cout << skCrypt("Successfully Created File For Auto Login");
-    }
-    else
-    {
-        WriteToJson("test.json", "username", username, true, "password", password);
-        std::cout << skCrypt("Successfully Created File For Auto Login");
-    }
-
-    /*
-    * Do NOT remove this checkAuthenticated() function.
-    * It protects you from cracking, it would be NOT be a good idea to remove it
-    */
-    std::thread run(checkAuthenticated, ownerid);
-    // do NOT remove checkAuthenticated(), it MUST stay for security reasons
-    std::thread check(sessionStatus); // do NOT remove this function either.
-
-   
-
-    if (KeyAuthApp.user_data.username.empty()) exit(10);
-    std::cout << skCrypt("\n User data:");
-    std::cout << skCrypt("\n Username: ") << KeyAuthApp.user_data.username;
-    std::cout << skCrypt("\n IP address: ") << KeyAuthApp.user_data.ip;
-    std::cout << skCrypt("\n Hardware-Id: ") << KeyAuthApp.user_data.hwid;
-    std::cout << skCrypt("\n Create date: ") << tm_to_readable_time(timet_to_tm(string_to_timet(KeyAuthApp.user_data.createdate)));
-    std::cout << skCrypt("\n Last login: ") << tm_to_readable_time(timet_to_tm(string_to_timet(KeyAuthApp.user_data.lastlogin)));
-    std::cout << skCrypt("\n Subscription(s): ");
-
-    for (int i = 0; i < KeyAuthApp.user_data.subscriptions.size(); i++) {
-        auto sub = KeyAuthApp.user_data.subscriptions.at(i);
-        std::cout << skCrypt("\n name: ") << sub.name;
-        std::cout << skCrypt(" : expiry: ") << tm_to_readable_time(timet_to_tm(string_to_timet(sub.expiry)));
-    }
-
-
-    std::cout << skCrypt("\n\n Status: ") << KeyAuthApp.response.message;
-
-
-    std::cout << skCrypt("\n\n Closing in five seconds...");
-    Sleep(5000);
-
     return 0;
-}
-
-void sessionStatus() {
-    KeyAuthApp.check(true); // do NOT specify true usually, it is slower and will get you blocked from API
-    if (!KeyAuthApp.response.success) {
-        exit(0);
-    }
-
-    if (KeyAuthApp.response.isPaid) {
-        while (true) {
-            Sleep(20000); // this MUST be included or else you get blocked from API
-            KeyAuthApp.check();
-            if (!KeyAuthApp.response.success) {
-                exit(0);
-            }
-        }
-    }
-}
-
-std::string tm_to_readable_time(tm ctx) {
-    char buffer[80];
-
-    strftime(buffer, sizeof(buffer), "%a %m/%d/%y %H:%M:%S %Z", &ctx);
-
-    return std::string(buffer);
-}
-
-static std::time_t string_to_timet(std::string timestamp) {
-    auto cv = strtol(timestamp.c_str(), NULL, 10); // long
-
-    return (time_t)cv;
-}
-
-static std::tm timet_to_tm(time_t timestamp) {
-    std::tm context;
-
-    localtime_s(&context, &timestamp);
-
-    return context;
 }
